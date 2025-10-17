@@ -30,7 +30,7 @@ SERVICE_ACCOUNT_FILE = "/home/pi/Desktop/yolo_project/service_account.json"
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 drive_service = build("drive", "v3", credentials=creds)
-GOOGLE_DRIVE_FOLDER_ID = "12jyXGfuKG1yNTZsOfe4-mVz9bRB4S32v"
+GOOGLE_DRIVE_FOLDER_ID = ""
 
 # ------------------ 訓練資料夾設定 ------------------
 TRAIN_FOLDER = "/home/pi/Desktop/yolo_project/auto/train"
@@ -57,7 +57,7 @@ serial = i2c(port=1, address=0x3C)
 device = sh1106(serial, framebuffer="diff_to_previous", persist=True)
 font_path = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"
 font = ImageFont.truetype(font_path, 15)
-LINETOKEN = "naobDbheaBWNXenoF04pMkG7iwyBqQXhRc1SdDalm89"
+LINETOKEN = "naobDbheaBWNXenoF04pMkG7iwyBqQXhRc1SdDalm89" #已無法使用
 
 trash_types = {
     "1": "紙容器回收桶", 
@@ -718,3 +718,4 @@ except Exception as e:
     send_line(generate_report())
     clear_old_data()
     upload_to_drive()
+
