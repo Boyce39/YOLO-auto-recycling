@@ -1,0 +1,16 @@
+ultralytics>=8.0.0
+opencv-python
+torch
+torchvision
+gpiozero
+luma.oled
+Pillow
+requests
+google-api-python-client
+google-auth
+playsound
+pandas
+matplotlib
+sqlite3
+pyyaml
+roboflow
