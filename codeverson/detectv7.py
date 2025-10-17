@@ -1,0 +1,170 @@
+import cv2
+import os
+from ultralytics import YOLO
+from datetime import datetime
+from gpiozero.tones import Tone
+from gpiozero import DistanceSensor, Button ,Servo,LED,TonalBuzzer
+import time
+import sqlite3
+import warnings
+warnings.filterwarnings("ignore")
+
+model = YOLO('bestv6.pt')
+sensor = DistanceSensor(echo=23, trigger=24)
+last_time = 0   
+flag=True
+
+def play_music():
+    buzzer = TonalBuzzer(20)
+    song = [
+    ("E4", 0.6), ("G4", 0.6), ("E4", 0.6), ("C4", 0.6),  
+    ("A3", 0.6), ("C4", 0.6), ("E4", 0.6), ("D4", 0.6),  
+    ("B3", 0.6), ("D4", 0.6), ("F4", 0.6), ("E4", 0.8)   
+]
+    for note, duration in song:
+        buzzer.play(Tone(note))
+        time.sleep(duration)
+    buzzer.stop()
+    buzzer.close()
+
+def waring():
+    buzzer = TonalBuzzer(20)
+    for _ in range(2):  
+        buzzer.play(Tone(880)) 
+        time.sleep(0.3)  
+        buzzer.stop()
+        time.sleep(0.2) 
+    buzzer.stop()
+    buzzer.close()
+
+def connect_db():
+    return sqlite3.connect("garbage_data.db")
+
+buttons = {
+    "塑膠": Button(17, pull_up=True),
+    "紙類": Button(27, pull_up=True),
+    "金屬": Button(22, pull_up=True),
+}
+
+def open_door():
+    servo = Servo(19, min_pulse_width=0.0009, max_pulse_width=0.0018)
+    print("自動化系統啟動，請投入垃圾")
+    servo.min()
+    time.sleep(0.6)
+    servo.value = None
+    time.sleep(3)
+    servo.max()
+    time.sleep(0.6)
+    servo.value = None    
+
+def save_data(category):
+    conn = connect_db()
+    cursor = conn.cursor()
+    # **累加該類別的次數**
+    cursor.execute("UPDATE trash_log SET times = times + 1 WHERE category = ?", (category,))
+
+    conn.commit()
+    conn.close()
+
+
+def distance():
+    return sensor.distance * 100 
+
+def classification():
+    waring()
+    print("⏳ 等待使用者分類（10 秒內）...否則丟往一般垃圾")
+
+    start_time = time.time()
+
+    while time.time() - start_time < 10:  
+        for trash_type, button in buttons.items():
+            if button.is_pressed:
+                return trash_type  
+            
+        time.sleep(0.1)
+
+    return "一般垃圾"
+
+
+def run():
+    open_door()
+    ledpin=18
+    led=LED(ledpin)
+    led.on()
+    time.sleep(1)
+    cap = cv2.VideoCapture(0)  
+    hold = 0.6  
+    ret, frame = cap.read()
+    led.off()
+    results = model(frame)  
+    detect = []
+    
+    for result in results[0].boxes:
+        class_id = int(result.cls)  
+        confidence = float(result.conf) 
+        name = {0: '金屬類', 1: '紙類', 2: '塑膠類'}.get(class_id)
+        final = name if confidence >= hold else '一般垃圾'
+
+        detect.append(final)
+
+    
+    img = results[0].plot()  
+    nowtime = datetime.now().strftime("%Y%m%d_%H%M%S") 
+    save_img = f'/home/pi/Desktop/yolo_project/run_img/偵測_{nowtime}.jpg'
+
+    cv2.imwrite(save_img, img)  
+
+    cap.release()
+
+    cv2.destroyAllWindows()  
+
+    return detect 
+
+
+try:
+    while True:
+        dist = distance() 
+        if flag:
+            if dist < 20  :
+                flag=False
+                last_time = time.time()
+                print("🔍 偵測物品掉落，開始檢測...\n")
+                os.system("python3 music.py &") 
+                detected = run()
+                only=True
+                l=len(detected)
+                generally_count=detected.count('一般垃圾')
+                metal_count=detected.count('金屬類')
+                plastic_count=detected.count('塑膠類')
+                paper_count=detected.count('紙類')
+
+                if l==2 and generally_count==1:
+                        detected.remove('一般垃圾')
+                        final = detected[0]
+                elif  l > 2 :
+                    detected.remove('一般垃圾')
+                    l=len(detected)
+                    if l>1:
+                        for i in range(1,l):
+                            if detected[i-1]!=detected[i]:
+                                only=False
+                                break          
+                    if only:
+                        final = detected[0]
+                    else:
+                        print('檢測失敗請按壓按鈕分類')
+                        final = classification()
+                elif '一般垃圾' in detected:
+                    print('檢測到一般垃圾，如果偵測錯誤請按壓按鈕分類')
+                    final = classification()
+                elif l ==0 :
+                    final = classification()
+                else:
+                    final = detected[0]
+                save_data(final)
+                print(f"📦 最終分類結果：{final}")   
+                flag=True
+                play_music()
+except KeyboardInterrupt:
+    print("")
+
